@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>V2G Energy Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0f1a;
+    --surface: #111827;
+    --surface2: #1a2335;
+    --border: #1e3a5f;
+    --accent: #00d4ff;
+    --accent2: #00ff9d;
+    --warn: #ff6b35;
+    --text: #e2f0ff;
+    --muted: #6b8cae;
+    --card-r: 12px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    padding: 24px;
+  }
+
+  /* Animated grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .everything { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; }
+
+  /* Header */
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 32px;
+  }
+
+  .logo-area { display: flex; align-items: center; gap: 14px; }
+
+  .logo-icon {
+    width: 44px; height: 44px;
+    background: linear-gradient(135deg, #00d4ff22, #00ff9d22);
+    border: 1px solid var(--accent);
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Space Mono', monospace;
+    font-size: 18px;
+    color: var(--accent);
+    animation: pulse-border 3s ease-in-out infinite;
+  }
+
+  @keyframes pulse-border {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(0,212,255,0.3); }
+    50% { box-shadow: 0 0 0 6px rgba(0,212,255,0); }
+  }
+
+  h1 { font-family: 'Space Mono', monospace; font-size: 20px; font-weight: 700; letter-spacing: -0.5px; }
+  h1 span { color: var(--accent); }
+  .subtitle { font-size: 12px; color: var(--muted); margin-top: 2px; letter-spacing: 0.5px; text-transform: uppercase; }
+
+  .live-badge {
+    display: flex; align-items: center; gap: 6px;
+    background: rgba(0,255,157,0.1);
+    border: 1px solid rgba(0,255,157,0.3);
+    border-radius: 20px;
+    padding: 6px 14px;
+    font-size: 12px;
+    color: var(--accent2);
+    font-family: 'Space Mono', monospace;
+  }
+
+  .live-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--accent2);
+    animation: blink 1.2s ease-in-out infinite;
+  }
+
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+  /* Stat cards row */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--card-r);
+    padding: 18px 20px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.3s;
+  }
+
+  .stat-card:hover { border-color: var(--accent); }
+
+  .stat-card::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+  }
+
+  .stat-card.blue::after { background: linear-gradient(90deg, var(--accent), transparent); }
+  .stat-card.green::after { background: linear-gradient(90deg, var(--accent2), transparent); }
+  .stat-card.orange::after { background: linear-gradient(90deg, var(--warn), transparent); }
+  .stat-card.purple::after { background: linear-gradient(90deg, #a78bfa, transparent); }
+
+  .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px; }
+  .stat-value { font-family: 'Space Mono', monospace; font-size: 26px; font-weight: 700; line-height: 1; }
+  .stat-value.blue { color: var(--accent); }
+  .stat-value.green { color: var(--accent2); }
+  .stat-value.orange { color: var(--warn); }
+  .stat-value.purple { color: #a78bfa; }
+  .stat-unit { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .stat-delta { font-size: 11px; margin-top: 6px; }
+  .stat-delta.up { color: var(--accent2); }
+  .stat-delta.down { color: var(--warn); }
+
+  /* Main grid */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--card-r);
+    padding: 20px 24px;
+  }
+
+  .card-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .card-title::before {
+    content: '';
+    display: inline-block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  /* Flow diagram */
+  .flow-diagram {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 0;
+    gap: 8px;
+  }
+
+  .flow-node {
+    text-align: center;
+    flex: 1;
+  }
+
+  .flow-icon {
+    width: 64px; height: 64px;
+    border-radius: 14px;
+    margin: 0 auto 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px;
+    position: relative;
+  }
+
+  .flow-icon.solar { background: rgba(250,204,21,0.15); border: 1px solid rgba(250,204,21,0.4); }
+  .flow-icon.grid { background: rgba(0,212,255,0.12); border: 1px solid rgba(0,212,255,0.4); }
+  .flow-icon.ev { background: rgba(0,255,157,0.12); border: 1px solid rgba(0,255,157,0.4); }
+  .flow-icon.home { background: rgba(167,139,250,0.12); border: 1px solid rgba(167,139,250,0.4); }
+
+  .flow-name { font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+  .flow-watt { font-family: 'Space Mono', monospace; font-size: 11px; color: var(--muted); }
+
+  .flow-arrow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 60px;
+  }
+
+  .arrow-line {
+    width: 100%;
+    height: 2px;
+    border-radius: 1px;
+    position: relative;
+    overflow: visible;
+  }
+
+  .arrow-line.to-grid { background: linear-gradient(90deg, var(--accent2), var(--accent)); }
+  .arrow-line.from-grid { background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+  .arrow-line.to-home { background: linear-gradient(90deg, var(--accent), #a78bfa); }
+
+  .arrow-label { font-size: 10px; color: var(--muted); font-family: 'Space Mono', monospace; }
+
+  /* Animated flow particle */
+  .particle {
+    position: absolute;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    top: 50%; transform: translateY(-50%);
+    animation: flow-particle 2s linear infinite;
+  }
+
+  .particle.cyan { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+  .particle.green { background: var(--accent2); box-shadow: 0 0 6px var(--accent2); }
+
+  @keyframes flow-particle {
+    0% { left: 0; opacity: 0; }
+    10% { opacity: 1; }
+    90% { opacity: 1; }
+    100% { left: calc(100% - 8px); opacity: 0; }
+  }
+
+  /* Battery bar */
+  .battery-section { margin-bottom: 16px; }
+  .battery-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .battery-label { font-size: 13px; color: var(--muted); }
+  .battery-pct { font-family: 'Space Mono', monospace; font-size: 14px; color: var(--accent2); }
+  .battery-bar { height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden; }
+  .battery-fill { height: 100%; border-radius: 4px; transition: width 1s ease; }
+  .battery-fill.high { background: linear-gradient(90deg, var(--accent2), #00d4ff); }
+  .battery-fill.mid { background: linear-gradient(90deg, #facc15, #fb923c); }
+  .battery-fill.low { background: linear-gradient(90deg, var(--warn), #ef4444); }
+
+  /* Mode toggle */
+  .mode-section { margin-bottom: 20px; }
+  .mode-title { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 10px; }
+  .mode-buttons { display: flex; gap: 8px; }
+  .mode-btn {
+    flex: 1;
+    padding: 9px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+  }
+  .mode-btn.active {
+    background: rgba(0,212,255,0.12);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .mode-btn:hover:not(.active) { border-color: var(--muted); color: var(--text); }
+
+  /* Sessions list */
+  .session-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .session-item:last-child { border-bottom: none; }
+  .session-time { font-size: 12px; color: var(--muted); }
+  .session-info { font-size: 13px; }
+  .session-badge {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-family: 'Space Mono', monospace;
+  }
+  .session-badge.charge { background: rgba(0,212,255,0.15); color: var(--accent); }
+  .session-badge.discharge { background: rgba(0,255,157,0.15); color: var(--accent2); }
+
+  /* Bottom row */
+  .bottom-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  canvas { width: 100% !important; }
+
+  /* Savings highlight */
+  .savings-big {
+    text-align: center;
+    padding: 16px 0;
+  }
+  .savings-amount {
+    font-family: 'Space Mono', monospace;
+    font-size: 42px;
+    font-weight: 700;
+    color: var(--accent2);
+    line-height: 1;
+  }
+  .savings-label { font-size: 13px; color: var(--muted); margin-top: 6px; }
+  .savings-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  .divider { width: 1px; height: 40px; background: var(--border); margin: 12px auto; }
+
+  .savings-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .savings-row:last-child { border: none; }
+  .savings-row span:last-child { font-family: 'Space Mono', monospace; color: var(--accent2); }
+
+  @media (max-width: 768px) {
+    .stats { grid-template-columns: 1fr 1fr; }
+    .main-grid { grid-template-columns: 1fr; }
+    .bottom-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="everything">
+
+  <header>
+    <div class="logo-area">
+      <div class="logo-icon">V2G</div>
+      <div>
+        <h1>Energy<span>Flow</span> Dashboard</h1>
+        <div class="subtitle">Africa University · EV Capstone Research</div>
+      </div>
+    </div>
+    <div class="live-badge">
+      <div class="live-dot"></div>
+      LIVE MONITORING
+    </div>
+  </header>
+
+  <!-- Stat cards -->
+  <div class="stats">
+    <div class="stat-card blue">
+      <div class="stat-label">Grid Export Today</div>
+      <div class="stat-value blue" id="export-val">18.4</div>
+      <div class="stat-unit">kWh exported to grid</div>
+      <div class="stat-delta up" id="export-delta">↑ 3.2 kWh vs yesterday</div>
+    </div>
+    <div class="stat-card green">
+      <div class="stat-label">EV Battery</div>
+      <div class="stat-value green" id="battery-val">74</div>
+      <div class="stat-unit">% state of charge</div>
+      <div class="stat-delta up">↑ Charging from solar</div>
+    </div>
+    <div class="stat-card orange">
+      <div class="stat-label">Current Draw</div>
+      <div class="stat-value orange" id="draw-val">3.2</div>
+      <div class="stat-unit">kW from grid</div>
+      <div class="stat-delta down">↓ Peak offset active</div>
+    </div>
+    <div class="stat-card purple">
+      <div class="stat-label">Revenue Today</div>
+      <div class="stat-value purple" id="revenue-val">$2.76</div>
+      <div class="stat-unit">from V2G export</div>
+      <div class="stat-delta up">↑ $0.42 vs yesterday</div>
+    </div>
+  </div>
+
+  <!-- Main grid -->
+  <div class="main-grid">
+    <!-- Left: chart + flow -->
+    <div>
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-title">Energy Flow — 24h</div>
+        <canvas id="flowChart" height="180"></canvas>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Live Energy Flow</div>
+        <div class="flow-diagram">
+          <div class="flow-node">
+            <div class="flow-icon solar">☀️</div>
+            <div class="flow-name">Solar</div>
+            <div class="flow-watt" id="solar-w">4.2 kW</div>
+          </div>
+          <div class="flow-arrow">
+            <div class="arrow-line from-grid" style="position:relative;">
+              <div class="particle green" style="animation-delay:0s;"></div>
+            </div>
+            <div class="arrow-label">→</div>
+          </div>
+          <div class="flow-node">
+            <div class="flow-icon ev">🔋</div>
+            <div class="flow-name">EV Battery</div>
+            <div class="flow-watt" id="ev-w">74% · 54 kWh</div>
+          </div>
+          <div class="flow-arrow">
+            <div class="arrow-line to-grid" style="position:relative;">
+              <div class="particle cyan" style="animation-delay:0.5s;"></div>
+            </div>
+            <div class="arrow-label">⇄</div>
+          </div>
+          <div class="flow-node">
+            <div class="flow-icon grid">⚡</div>
+            <div class="flow-name">Grid</div>
+            <div class="flow-watt" id="grid-w">−1.8 kW</div>
+          </div>
+          <div class="flow-arrow">
+            <div class="arrow-line to-home" style="position:relative;">
+              <div class="particle cyan" style="animation-delay:1s;"></div>
+            </div>
+            <div class="arrow-label">→</div>
+          </div>
+          <div class="flow-node">
+            <div class="flow-icon home">🏠</div>
+            <div class="flow-name">Home Load</div>
+            <div class="flow-watt" id="home-w">2.4 kW</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right panel -->
+    <div>
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-title">EV Battery Status</div>
+        <div class="battery-section">
+          <div class="battery-header">
+            <span class="battery-label">State of Charge</span>
+            <span class="battery-pct" id="soc-pct">74%</span>
+          </div>
+          <div class="battery-bar">
+            <div class="battery-fill high" id="soc-bar" style="width:74%"></div>
+          </div>
+        </div>
+        <div class="battery-section">
+          <div class="battery-header">
+            <span class="battery-label">Charge Health</span>
+            <span class="battery-pct" style="color:#a78bfa">96%</span>
+          </div>
+          <div class="battery-bar">
+            <div class="battery-fill high" style="width:96%; background: linear-gradient(90deg, #a78bfa, #818cf8);"></div>
+          </div>
+        </div>
+
+        <div class="mode-section" style="margin-top:20px;">
+          <div class="mode-title">Charging Mode</div>
+          <div class="mode-buttons">
+            <button class="mode-btn" onclick="setMode(this,'Charge')">⬆ Charge</button>
+            <button class="mode-btn active" onclick="setMode(this,'V2G')">⇄ V2G</button>
+            <button class="mode-btn" onclick="setMode(this,'Idle')">◻ Idle</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Recent Sessions</div>
+        <div class="session-item">
+          <div>
+            <div class="session-info">V2G Export</div>
+            <div class="session-time">Today 06:00–09:00</div>
+          </div>
+          <div class="session-badge discharge">−8.4 kWh</div>
+        </div>
+        <div class="session-item">
+          <div>
+            <div class="session-info">Solar Charge</div>
+            <div class="session-time">Today 10:00–14:00</div>
+          </div>
+          <div class="session-badge charge">+12.1 kWh</div>
+        </div>
+        <div class="session-item">
+          <div>
+            <div class="session-info">V2G Export</div>
+            <div class="session-time">Today 17:00–20:00</div>
+          </div>
+          <div class="session-badge discharge">−10.0 kWh</div>
+        </div>
+        <div class="session-item">
+          <div>
+            <div class="session-info">Grid Charge</div>
+            <div class="session-time">Yesterday 23:00</div>
+          </div>
+          <div class="session-badge charge">+15.2 kWh</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom row -->
+  <div class="bottom-grid">
+    <div class="card">
+      <div class="card-title">Weekly Export (kWh)</div>
+      <canvas id="weekChart" height="160"></canvas>
+    </div>
+    <div class="card">
+      <div class="card-title">Monthly Savings</div>
+      <div class="savings-big">
+        <div class="savings-amount">$41.20</div>
+        <div class="savings-label">Total saved this month</div>
+        <div class="savings-sub">via V2G revenue + peak shifting</div>
+      </div>
+      <div class="divider"></div>
+      <div class="savings-row"><span>V2G revenue</span><span>$28.50</span></div>
+      <div class="savings-row"><span>Peak demand offset</span><span>$9.40</span></div>
+      <div class="savings-row"><span>Solar self-consumption</span><span>$3.30</span></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const hours = ['00','02','04','06','08','10','12','14','16','18','20','22'];
+const gridExport = [0,0,0,8.2,6.1,0,0,0,0,9.8,7.4,3.1];
+const gridImport = [2.1,1.8,1.5,0,0,3.2,4.1,3.8,3.0,0,0,0];
+const solar = [0,0,0,0,1.2,3.8,4.5,4.2,3.1,0.8,0,0];
+
+const ctx1 = document.getElementById('flowChart').getContext('2d');
+new Chart(ctx1, {
+  type: 'line',
+  data: {
+    labels: hours.map(h => h+':00'),
+    datasets: [
+      {
+        label: 'V2G Export',
+        data: gridExport,
+        borderColor: '#00ff9d',
+        backgroundColor: 'rgba(0,255,157,0.08)',
+        fill: true,
+        tension: 0.4,
+        pointRadius: 3,
+        pointBackgroundColor: '#00ff9d',
+        borderWidth: 2
+      },
+      {
+        label: 'Grid Import',
+        data: gridImport,
+        borderColor: '#00d4ff',
+        backgroundColor: 'rgba(0,212,255,0.08)',
+        fill: true,
+        tension: 0.4,
+        pointRadius: 3,
+        pointBackgroundColor: '#00d4ff',
+        borderWidth: 2
+      },
+      {
+        label: 'Solar',
+        data: solar,
+        borderColor: '#facc15',
+        backgroundColor: 'rgba(250,204,21,0.06)',
+        fill: true,
+        tension: 0.4,
+        pointRadius: 3,
+        pointBackgroundColor: '#facc15',
+        borderWidth: 2
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { labels: { color: '#6b8cae', font: { size: 11 }, boxWidth: 12 } }
+    },
+    scales: {
+      x: { ticks: { color: '#6b8cae', font: { size: 10 } }, grid: { color: 'rgba(30,58,95,0.6)' } },
+      y: {
+        ticks: { color: '#6b8cae', font: { size: 10 }, callback: v => v + ' kW' },
+        grid: { color: 'rgba(30,58,95,0.6)' }
+      }
+    }
+  }
+});
+
+const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const weekData = [12.4, 15.1, 10.8, 18.4, 16.2, 8.3, 14.7];
+const ctx2 = document.getElementById('weekChart').getContext('2d');
+new Chart(ctx2, {
+  type: 'bar',
+  data: {
+    labels: days,
+    datasets: [{
+      label: 'kWh exported',
+      data: weekData,
+      backgroundColor: weekData.map((v,i) => i === 3 ? 'rgba(0,255,157,0.7)' : 'rgba(0,212,255,0.35)'),
+      borderColor: weekData.map((v,i) => i === 3 ? '#00ff9d' : '#00d4ff'),
+      borderWidth: 1,
+      borderRadius: 4
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { color: '#6b8cae', font: { size: 11 } }, grid: { display: false } },
+      y: {
+        ticks: { color: '#6b8cae', font: { size: 10 }, callback: v => v + ' kWh' },
+        grid: { color: 'rgba(30,58,95,0.6)' }
+      }
+    }
+  }
+});
+
+function setMode(btn, mode) {
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+// Subtle live updates
+setInterval(() => {
+  const soc = Math.round(72 + Math.random() * 5);
+  document.getElementById('soc-pct').textContent = soc + '%';
+  document.getElementById('battery-val').textContent = soc;
+  document.getElementById('ev-w').textContent = soc + '% · ' + Math.round(soc * 0.73) + ' kWh';
+  const bar = document.getElementById('soc-bar');
+  bar.style.width = soc + '%';
+  bar.className = 'battery-fill ' + (soc > 60 ? 'high' : soc > 30 ? 'mid' : 'low');
+
+  const draw = (2.8 + Math.random() * 0.8).toFixed(1);
+  document.getElementById('draw-val').textContent = draw;
+
+  const exp = (17.8 + Math.random() * 1.2).toFixed(1);
+  document.getElementById('export-val').textContent = exp;
+}, 3000);
+</script>
+</body>
+</html>

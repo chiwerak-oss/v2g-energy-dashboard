@@ -14,7 +14,7 @@
     --text: #eef1f6;
     --muted: #7d8797;
     --accent: #fbbf24;
-    --existing: #3a4351;
+    --existing: #22c55e;
     --result: #4ade80;
   }
 
@@ -31,7 +31,7 @@
 
   .app { width: 100%; max-width: 1180px; margin: 0 auto; }
 
-  /* ---- Header ---- */
+  /* Header */
   header {
     display: flex;
     justify-content: space-between;
@@ -55,16 +55,12 @@
   h1 { font-size: 26px; font-weight: 700; }
   header p { color: var(--muted); font-size: 13px; margin-top: 4px; }
 
-  /* ---- Layout: asymmetric split ---- */
+  /* Layout */
   .layout {
     display: grid;
-    grid-template-columns: 320px 1fr;
+    grid-template-columns: 1fr;
     gap: 24px;
     align-items: start;
-  }
-
-  @media (max-width: 820px) {
-    .layout { grid-template-columns: 1fr; }
   }
 
   .controls, .dashboard {
@@ -162,7 +158,7 @@
   /* Custom charger reveal */
   #customChargerField { margin-top: 12px; display: none; }
 
-  /* ---- Dashboard (right column) ---- */
+  /* Dashboard */
   .dashboard { display: flex; flex-direction: column; gap: 26px; }
 
   /* Battery visual */
@@ -198,8 +194,14 @@
   .fill-existing {
     position: absolute;
     left: 0; top: 0; bottom: 0;
-    background: var(--existing);
     width: 0%;
+    background: repeating-linear-gradient(
+      45deg,
+      var(--existing) 0 8px,
+      #16a34a 8px 16px
+    );
+    background-size: 200% 200%;
+    animation: charge-stripes 1.4s linear infinite;
     transition: width 0.25s ease;
   }
 
@@ -208,19 +210,13 @@
     top: 0; bottom: 0;
     left: 0%;
     width: 0%;
-    background: repeating-linear-gradient(
-      45deg,
-      var(--accent) 0 8px,
-      #e8a91a 8px 16px
-    );
-    background-size: 200% 200%;
-    animation: charge-stripes 1.4s linear infinite;
+    background: #3b82f6;
     transition: left 0.25s ease, width 0.25s ease;
   }
 
   @keyframes charge-stripes {
-    from { background-position: 0 0; }
-    to { background-position: 32px 0; }
+    from { background-position: 32px 0; }
+    to { background-position: 0 0; }
   }
 
   .battery-marker {
@@ -422,10 +418,10 @@
       <details class="breakdown">
         <summary>Show calculation breakdown</summary>
         <div class="bk-list">
-          <div class="bk-row"><span class="bk-label">Charge added</span><span class="bk-val" id="bkAdded">—</span></div>
-          <div class="bk-row"><span class="bk-label">Energy needed</span><span class="bk-val" id="bkEnergy">—</span></div>
-          <div class="bk-row"><span class="bk-label">Electricity rate</span><span class="bk-val" id="bkRate">—</span></div>
-          <div class="bk-row"><span class="bk-label">Charger power</span><span class="bk-val" id="bkCharger">—</span></div>
+          <div class="bk-row"><span class="bk-label">Charge added</span><span class="bk-val" id="bkAdded">0</span></div>
+          <div class="bk-row"><span class="bk-label">Energy needed</span><span class="bk-val" id="bkEnergy">0</span></div>
+          <div class="bk-row"><span class="bk-label">Electricity rate</span><span class="bk-val" id="bkRate">0</span></div>
+          <div class="bk-row"><span class="bk-label">Charger power</span><span class="bk-val" id="bkCharger">0</span></div>
         </div>
       </details>
 
@@ -434,7 +430,7 @@
   </div>
 
   <footer>
-    Built by Kevin Chiwera — <a href="https://github.com/chiwerak-oss/ev-charging-calculator" target="_blank">source on GitHub</a> — V2G Capstone Research, Africa University
+    Built by Kevin Chiwera. <a href="https://github.com/chiwerak-oss/ev-charging-calculator" target="_blank">Source on GitHub</a>. V2G Capstone Research, Africa University.
   </footer>
 
 </div>

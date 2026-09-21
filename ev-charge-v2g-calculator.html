@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<title>Charge & Discharge — V2G Research Tool</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+<style>
+:root{
+  --bg:#0B0C0F; --panel:#141519; --panel2:#1B1D22; --raised:#202329;
+  --line:rgba(255,255,255,.08); --line-soft:rgba(255,255,255,.05);
+  --ink:#F3F1EC; --ink-dim:#C9C7C1; --muted:#8B8E96;
+  --copper:#E1954F; --copper-soft:rgba(225,149,79,.14);
+  --violet:#9C8FEA; --violet-soft:rgba(156,143,234,.14);
+  --green:#5CD684; --green-soft:rgba(92,214,132,.14);
+  --red:#F0776B; --red-soft:rgba(240,119,107,.13);
+  --amber:#E1954F;
+  --r-lg:16px; --r-md:11px; --r-sm:7px;
+}
+:root:not([data-theme="light"]){color-scheme:dark}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:'Inter',sans-serif; font-size:15px; line-height:1.5;
+  padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px) 0;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1180px; margin:0 auto; padding:0 20px 90px}
+.app{opacity:0; transition:opacity .5s ease}
+.app.ready{opacity:1}
+::selection{background:var(--copper-soft); color:var(--ink)}
+
+/* ---------- splash ---------- */
+#splash{position:fixed; inset:0; background:var(--bg); z-index:60; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:22px; transition:opacity .4s ease}
+#splash.out{opacity:0; pointer-events:none}
+.sp-flow{width:180px; height:46px}
+.sp-flow path{stroke:var(--copper); stroke-width:2; fill:none; stroke-dasharray:6 7; animation:dash 1s linear infinite}
+@keyframes dash{to{stroke-dashoffset:-13}}
+.sp-text{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--muted); letter-spacing:.02em; display:flex; gap:9px; align-items:center}
+.spin{width:12px;height:12px;border:2px solid rgba(139,142,150,.25);border-top-color:var(--copper);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ---------- hero / flow diagram ---------- */
+.hero{padding:38px 0 26px; border-bottom:1px solid var(--line-soft)}
+.eyebrow{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--copper); margin-bottom:10px}
+h1{font-family:'Fraunces',serif; font-weight:500; font-size:clamp(28px,4vw,40px); letter-spacing:-.01em; margin:0 0 8px; color:#fff}
+.hero p{color:var(--muted); font-size:14.5px; max-width:56ch; margin:0 0 26px}
+
+.flow{display:flex; align-items:center; gap:0; margin-top:4px}
+.flow-node{display:flex; flex-direction:column; align-items:center; gap:8px; min-width:74px}
+.flow-node .icon{width:46px; height:46px; border-radius:50%; border:1.5px solid var(--line); background:var(--panel); display:grid; place-items:center; transition:border-color .3s ease, box-shadow .3s ease}
+.flow-node .icon svg{width:22px; height:22px}
+.flow-node span{font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--muted); text-align:center}
+.flow-node.active .icon{border-color:var(--copper); box-shadow:0 0 0 4px var(--copper-soft)}
+.flow-node.v2g .icon{border-color:var(--violet); box-shadow:0 0 0 4px var(--violet-soft)}
+.flow-line{flex:1; height:34px; position:relative; margin:0 4px}
+.flow-line svg{width:100%; height:100%; overflow:visible}
+.flow-line path{fill:none; stroke:var(--line); stroke-width:2}
+.flow-line path.charge{stroke:var(--copper); stroke-dasharray:7 6; animation:flowfwd 1.1s linear infinite}
+.flow-line path.discharge{stroke:var(--violet); stroke-dasharray:7 6; animation:flowrev 1.1s linear infinite; opacity:0}
+.flow-line.v2g-on path.discharge{opacity:1}
+.flow-line.v2g-on path.charge{opacity:.28; animation-play-state:paused}
+@keyframes flowfwd{to{stroke-dashoffset:-13}}
+@keyframes flowrev{to{stroke-dashoffset:13}}
+
+/* ---------- layout ---------- */
+.grid{display:grid; grid-template-columns:1fr; gap:22px; margin-top:26px}
+@media(min-width:960px){.grid{grid-template-columns:minmax(0,1fr) 340px} .side{position:sticky; top:20px}}
+
+.card{background:var(--panel); border:1px solid var(--line); border-radius:var(--r-lg); padding:22px}
+.card + .card{margin-top:18px}
+.card-head{display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:16px}
+.card-head h2{font-family:'Fraunces',serif; font-weight:500; font-size:18px; color:#fff; margin:0}
+.card-head .hint{font-size:12px; color:var(--muted)}
+
+/* ---------- vehicle chips ---------- */
+.seg{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:18px}
+.seg button{
+  font:500 13px 'Inter',sans-serif; color:var(--ink-dim); background:var(--panel2);
+  border:1px solid var(--line); border-radius:10px; padding:9px 14px; cursor:pointer;
+  display:flex; flex-direction:column; align-items:flex-start; gap:2px; transition:all .18s ease;
+}
+.seg button b{font-size:13px; color:var(--ink)}
+.seg button small{font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--muted)}
+.seg button:hover{border-color:rgba(225,149,79,.4)}
+.seg button.active{border-color:var(--copper); background:var(--copper-soft)}
+.seg button.active b, .seg button.active small{color:var(--copper)}
+
+.row{display:flex; align-items:center; justify-content:space-between; gap:14px; padding:13px 0; border-top:1px solid var(--line-soft)}
+.row:first-of-type{border-top:none}
+.row label{font-size:13.5px; color:var(--ink-dim)}
+.row .sub{font-size:11.5px; color:var(--muted); margin-top:2px}
+.badge{font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--green); background:var(--green-soft); border-radius:20px; padding:2px 9px; margin-left:8px}
+
+.stepper{display:flex; align-items:center; background:var(--panel2); border:1px solid var(--line); border-radius:9px; overflow:hidden; width:160px; flex:none}
+.stepper.focus{border-color:var(--copper)}
+.stepper.bad{border-color:var(--red); background:var(--red-soft)}
+.stepper.bad input{color:#FCA9A0}
+.stepper button{background:none; border:none; color:var(--muted); width:28px; height:32px; font-size:15px; cursor:pointer}
+.stepper button:hover{color:var(--copper)}
+.stepper input{width:100%; min-width:0; background:none; border:none; color:#fff; font:600 14px 'Inter',sans-serif; text-align:center; outline:none; -moz-appearance:textfield; font-feature-settings:'tnum'}
+.stepper input::-webkit-inner-spin-button{-webkit-appearance:none}
+.stepper .unit{font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--muted); padding-right:7px; white-space:nowrap}
+.errtip{display:none; align-items:center; gap:7px; font-size:12px; color:#FCA9A0; padding:8px 0 0}
+.errtip.show{display:flex}
+.errtip i{width:14px;height:14px;border-radius:50%;background:var(--red-soft);border:1px solid rgba(240,119,107,.5);color:var(--red);font-style:normal;font-size:10px;font-weight:700;display:grid;place-items:center; flex:none}
+
+/* progress bar with two handles (visual, mirrors steppers) */
+.bar-wrap{margin-top:4px}
+.bar-labels{display:flex; justify-content:space-between; font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); margin-bottom:8px}
+.bar-labels b{color:#fff; font-size:13px; font-family:'Inter',sans-serif; font-weight:600}
+.bar{height:10px; border-radius:6px; background:var(--line-soft); position:relative}
+.bar-fill{position:absolute; top:0; bottom:0; border-radius:6px; background:var(--copper); left:0; width:0%}
+.bar-mark{position:absolute; top:-4px; width:2px; height:18px; background:var(--muted); opacity:.5}
+.bar-mark.tgt{background:var(--ink); opacity:.9}
+
+/* charger table */
+.ctable{width:100%; border-collapse:collapse; font-size:13px}
+.ctable th{text-align:left; font-weight:500; color:var(--muted); font-size:11.5px; padding:0 10px 10px 0; border-bottom:1px solid var(--line)}
+.ctable td{padding:11px 10px 11px 0; border-bottom:1px solid var(--line-soft); color:var(--ink-dim)}
+.ctable tr:last-child td{border-bottom:none}
+.ctable tr.sel td{color:#fff}
+.ctable tr.sel{background:var(--copper-soft)}
+.ctable tr{cursor:pointer}
+.ctable tr:hover:not(.sel){background:var(--panel2)}
+.ctable td.name{color:#fff; font-weight:500; display:flex; align-items:center; gap:8px}
+.ctable td.name .dotm{width:6px;height:6px;border-radius:50%;background:var(--copper); opacity:0}
+.ctable tr.sel td.name .dotm{opacity:1}
+.ctable td.num{font-family:'IBM Plex Mono',monospace; font-variant-numeric:tabular-nums}
+.ctable .capnote{font-size:10.5px; color:var(--muted)}
+.custom-inline{display:flex; align-items:center; gap:10px; margin-top:12px; padding-top:12px; border-top:1px solid var(--line-soft)}
+
+.toggle-row{display:flex; align-items:center; justify-content:space-between; gap:14px}
+.t-sub{font-size:12px; color:var(--muted); margin-top:3px; max-width:42ch}
+.sw{width:42px; height:24px; border-radius:13px; background:var(--panel2); border:1px solid var(--line); position:relative; cursor:pointer; flex:none; transition:.2s}
+.sw i{position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%; background:var(--muted); transition:.2s}
+.sw.on{border-color:var(--copper); background:var(--copper-soft)}
+.sw.on i{left:20px; background:var(--copper)}
+.sw.disabled{opacity:.4; cursor:not-allowed}
+.sw.v{}
+.sw.v.on{border-color:var(--violet); background:var(--violet-soft)}
+.sw.v.on i{background:var(--violet)}
+.note{margin-top:12px; border:1px solid rgba(225,149,79,.28); background:var(--copper-soft); border-radius:10px; padding:11px 13px; font-size:12.5px; color:#F2D2AE; display:none}
+.note.show{display:block}
+.note.v2g{border-color:rgba(156,143,234,.3); background:var(--violet-soft); color:#DCD6FA}
+.note b{color:inherit}
+
+/* chart */
+.chart-wrap{position:relative}
+svg.chart{width:100%; height:auto; display:block; overflow:visible}
+.chart-note{font-size:12px; color:var(--muted); margin-top:12px; display:flex; flex-wrap:wrap; gap:16px; align-items:center}
+.dot{display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:6px}
+.eta{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink-dim); margin-left:auto}
+
+/* results side */
+.hero-num{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:18px}
+.h-lab{font-size:11px; color:var(--muted); margin-bottom:6px}
+.h-val{font:700 34px/1 'Inter',sans-serif; font-feature-settings:'tnum'; color:var(--copper); letter-spacing:-.01em}
+.h-val.time{color:var(--ink)}
+.h-unit{font-size:11px; color:var(--muted); margin-top:6px}
+.gauge{display:flex; align-items:center; gap:16px; border-top:1px solid var(--line-soft); padding-top:16px}
+.g-lab{font-size:11px; color:var(--muted)}
+.g-val{font:600 19px 'Inter',sans-serif; margin-top:3px; color:#fff}
+.g-sub{font-size:12px; color:var(--muted); margin-top:2px}
+.mini{display:grid; gap:1px; background:var(--line); border:1px solid var(--line-soft); border-radius:10px; overflow:hidden; margin-top:16px}
+.mini div{background:var(--panel2); padding:11px 13px; display:flex; justify-content:space-between; gap:10px; align-items:baseline}
+.m-lab{font-size:12.5px; color:var(--muted)}
+.m-val{font-family:'IBM Plex Mono',monospace; font-size:13.5px; color:#fff; font-variant-numeric:tabular-nums}
+.m-save{color:var(--green); font-weight:600}
+.unit-toggle{display:flex; gap:4px; margin-top:14px}
+.unit-toggle button{flex:1; font:500 11.5px 'Inter',sans-serif; color:var(--muted); background:var(--panel2); border:1px solid var(--line); padding:6px; border-radius:7px; cursor:pointer}
+.unit-toggle button.active{color:var(--copper); border-color:var(--copper)}
+
+details{border-top:1px solid var(--line-soft); margin-top:16px; padding-top:12px}
+summary{cursor:pointer; font-size:12.5px; color:var(--muted); list-style:none; display:flex; justify-content:space-between; align-items:center}
+summary::-webkit-details-marker{display:none}
+summary::before{content:'+'; color:var(--copper); margin-right:8px; font-family:'IBM Plex Mono',monospace}
+details[open] summary::before{content:'–'}
+.bk{display:flex; justify-content:space-between; padding:6px 0; font-size:12.5px}
+.bk span:first-child{color:var(--muted)}
+.bk span:last-child{font-family:'IBM Plex Mono',monospace; color:#fff; font-variant-numeric:tabular-nums}
+
+.assum{display:grid; grid-template-columns:1fr auto; gap:8px 14px; align-items:center; font-size:13px}
+.assum label{color:var(--ink-dim)}
+.assum .src{grid-column:1/-1; font-size:11.5px; color:var(--muted); margin:-2px 0 8px}
+.assum .stepper{width:130px}
+
+.v2g-body{display:grid; grid-template-columns:1fr; gap:18px}
+@media(min-width:640px){.v2g-body{grid-template-columns:1fr 1fr}}
+.v2g-stat{background:var(--panel2); border:1px solid var(--line-soft); border-radius:12px; padding:16px}
+.v2g-stat .g-lab{margin-bottom:6px}
+.v2g-stat .v-val{font:700 26px 'Inter',sans-serif; color:var(--violet); font-feature-settings:'tnum'}
+
+footer{margin-top:30px; font-size:12px; color:var(--muted); padding-top:18px; border-top:1px solid var(--line-soft)}
+footer a{color:var(--copper); text-decoration:none}
+
+/* mobile sticky results */
+@media(max-width:959px){
+  .side{order:-1}
+  .sticky-bar{position:fixed; left:0; right:0; bottom:0; z-index:40; background:rgba(20,21,25,.92); backdrop-filter:blur(10px); border-top:1px solid var(--line); padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px)); display:flex; gap:18px; align-items:center; transform:translateY(0); transition:transform .25s ease}
+  .sticky-bar.hide{transform:translateY(100%)}
+  .sticky-bar .sb-item{flex:1}
+  .sticky-bar .sb-lab{font-size:10px; color:var(--muted)}
+  .sticky-bar .sb-val{font:700 18px 'Inter',sans-serif; color:var(--copper); font-feature-settings:'tnum'}
+  .sticky-bar .sb-val.time{color:var(--ink)}
+  body{padding-bottom:64px}
+}
+@media(min-width:960px){.sticky-bar{display:none}}
+</style>
+</head>
+<body>
+
+<div id="splash">
+  <svg class="sp-flow" viewBox="0 0 180 46"><path d="M4 23 H176"/></svg>
+  <div class="sp-text"><span class="spin"></span><span id="spMsg">Loading vehicle & tariff models…</span></div>
+</div>
+
+<div class="app" id="app">
+<div class="wrap">
+
+<div class="hero">
+  <div class="eyebrow">Vehicle‑to‑Grid Research Tool · Africa University</div>
+  <h1>Charge &amp; Discharge</h1>
+  <p>Model what it costs to charge, how the battery fills over time, and — since this is a V2G study — what a car could earn by feeding power back to the grid.</p>
+
+  <div class="flow" id="flowDiagram">
+    <div class="flow-node"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" style="color:var(--muted)"><path d="M4 21V10l8-6 8 6v11"/><path d="M9 21v-6h6v6"/></svg></div><span>GRID</span></div>
+    <div class="flow-line" id="flowLine1"><svg viewBox="0 0 100 34" preserveAspectRatio="none"><path class="charge" d="M0 17 H100"/><path class="discharge" d="M0 17 H100"/></svg></div>
+    <div class="flow-node active" id="nodeCharger"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" style="color:var(--copper)"><path d="M13 2 L4 14h6l-1 8 9-12h-6z"/></svg></div><span id="chargerFlowLabel">LEVEL 2</span></div>
+    <div class="flow-line" id="flowLine2"><svg viewBox="0 0 100 34" preserveAspectRatio="none"><path class="charge" d="M0 17 H100"/><path class="discharge" d="M0 17 H100"/></svg></div>
+    <div class="flow-node" id="nodeBattery"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" style="color:var(--ink-dim)"><rect x="2" y="7" width="18" height="10" rx="2"/><path d="M22 10v4"/></svg></div><span id="battFlowLabel">75 kWh PACK</span></div>
+  </div>
+</div>
+
+<div class="grid">
+<div>
+
+  <div class="card">
+    <div class="card-head"><h2>Vehicle</h2><span class="hint">sets the pack size &amp; max acceptance rate</span></div>
+    <div class="seg" id="presetRow">
+      <button class="active" onclick="preset(this,'small')"><b>Small EV</b><small>40 kWh · 7.2 kW AC / 50 kW DC max</small></button>
+      <button onclick="preset(this,'mid')"><b>Mid‑range</b><small>75 kWh · 11 kW AC / 150 kW DC max</small></button>
+      <button onclick="preset(this,'long')"><b>Long‑range</b><small>100 kWh · 11 kW AC / 250 kW DC max</small></button>
+    </div>
+    <div class="row"><label>Battery capacity</label>
+      <div class="stepper" id="wCap"><button onclick="step('capacity',-5,10,150)">−</button><input type="number" id="capacity" value="75" oninput="capIn()"/><span class="unit">kWh</span><button onclick="step('capacity',5,10,150)">+</button></div></div>
+    <div class="row"><label>Current charge</label>
+      <div class="stepper" id="wCur"><button onclick="step('current',-5,0,100)">−</button><input type="number" id="current" value="20" oninput="chargeIn()"/><span class="unit">%</span><button onclick="step('current',5,0,100)">+</button></div></div>
+    <div class="row"><div><label>Target charge</label><span class="badge" id="delta">+70%</span></div>
+      <div class="stepper" id="wTgt"><button onclick="step('target',-5,0,100)">−</button><input type="number" id="target" value="90" oninput="chargeIn()"/><span class="unit">%</span><button onclick="step('target',5,0,100)">+</button></div></div>
+    <div class="errtip" id="errTip"><i>!</i><span>Target must be higher than current charge</span></div>
+    <div class="bar-wrap" style="margin-top:6px">
+      <div class="bar-labels"><span>Current <b id="labCur">20%</b></span><span>Target <b id="labTgt">90%</b></span></div>
+      <div class="bar"><div class="bar-fill" id="barFill"></div><div class="bar-mark" id="markKnee" style="left:80%"></div></div>
+    </div>
+    <div class="row" style="border-top:1px solid var(--line-soft); margin-top:14px"><label>Electricity rate</label>
+      <div class="stepper" id="wRate"><button onclick="rateStep(-.01)">−</button><input type="number" id="rate" value="0.12" oninput="calc()"/><span class="unit">$/kWh</span><button onclick="rateStep(.01)">+</button></div></div>
+    <div class="note show" id="warn100" style="display:none"><b>Note —</b> charging past ~80% is slower on DC fast chargers and adds more cycling stress; 80% is a common daily‑driving target.</div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>Chargers, compared</h2><span class="hint">capped to what this vehicle can actually accept</span></div>
+    <table class="ctable">
+      <thead><tr><th>Charger</th><th>Effective power</th><th>Time to target</th><th>Cost</th></tr></thead>
+      <tbody id="ctableBody"></tbody>
+    </table>
+    <div class="custom-inline">
+      <label style="font-size:13px;color:var(--ink-dim);white-space:nowrap">Custom power</label>
+      <div class="stepper" id="wCustom" style="width:150px"><button onclick="customStep(-1)">−</button><input type="number" id="customKw" value="11" oninput="customIn()"/><span class="unit">kW</span><button onclick="customStep(1)">+</button></div>
+      <button onclick="useCustom()" style="font:500 12.5px 'Inter',sans-serif;color:var(--copper);background:none;border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer">Use this</button>
+    </div>
+    <div class="toggle-row" style="margin-top:18px;border-top:1px solid var(--line-soft);padding-top:16px">
+      <div><div style="font-size:13.5px;font-weight:600">Real‑world DC taper</div>
+        <div class="t-sub" id="taperSub">DC fast chargers slow to roughly a quarter of peak power above 80% state of charge — a simplification of published charge curves, not a fixed law.</div></div>
+      <div class="sw on" id="sw" onclick="toggleCurve()"><i></i></div>
+    </div>
+    <div class="note" id="acNote"><b>Constant power —</b> AC (Level 1 / Level 2) charging doesn't taper the way DC fast charging does, so this switch has no effect while an AC charger is selected.</div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>State of charge over time</h2><span class="hint" id="etaTop"></span></div>
+    <div class="chart-wrap"><svg class="chart" viewBox="0 0 640 220" id="chart"></svg></div>
+    <div class="chart-note">
+      <span><i class="dot" style="background:var(--copper)"></i>Full power</span>
+      <span><i class="dot" style="background:var(--amber);opacity:.55"></i>Tapered above 80%</span>
+      <span id="taperNote"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>Send power back (V2G)</h2><span class="hint">what this pack could discharge to the grid</span></div>
+    <div class="toggle-row">
+      <div><div style="font-size:13.5px;font-weight:600">Model a discharge event</div>
+        <div class="t-sub">Instead of charging, estimate what the vehicle could export from its current charge down to a reserve you keep for driving.</div></div>
+      <div class="sw v" id="swV2g" onclick="toggleV2g()"><i></i></div>
+    </div>
+    <div id="v2gPanel" style="display:none;margin-top:16px">
+      <div class="row" style="border-top:none;padding-top:0"><label>Reserve to keep</label>
+        <div class="stepper" id="wReserve"><button onclick="v2gStep('reserve',-5,0,90)">−</button><input type="number" id="v2gReserve" value="30" oninput="calc()"/><span class="unit">%</span><button onclick="v2gStep('reserve',5,0,90)">+</button></div></div>
+      <div class="row"><label>Bidirectional charger power</label>
+        <div class="stepper" id="wV2gKw"><button onclick="v2gStep('kw',-1,1,20)">−</button><input type="number" id="v2gKw" value="7" oninput="calc()"/><span class="unit">kW</span><button onclick="v2gStep('kw',1,1,20)">+</button></div></div>
+      <div class="row"><label>Grid buy‑back / DR rate</label>
+        <div class="stepper" id="wV2gRate"><button onclick="v2gStep('rate',-.02,0,2)">−</button><input type="number" id="v2gRate" value="0.20" oninput="calc()"/><span class="unit">$/kWh</span><button onclick="v2gStep('rate',.02,0,2)">+</button></div></div>
+      <div class="v2g-body" style="margin-top:14px">
+        <div class="v2g-stat"><div class="g-lab">Energy exportable</div><div class="v-val" id="v2gEnergy">0.0 kWh</div><div class="g-sub" id="v2gEnergySub">down to 30% reserve</div></div>
+        <div class="v2g-stat"><div class="g-lab">Estimated payout</div><div class="v-val" id="v2gPayout">$0.00</div><div class="g-sub" id="v2gTime">0h at 7 kW</div></div>
+      </div>
+      <div class="note v2g show" style="margin-top:14px"><b>Modeled, not guaranteed —</b> real V2G compensation depends on your utility's program, inverter losses (~10–15% round‑trip, not modeled here), and cycling limits your manufacturer sets.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>Assumptions</h2><span class="hint">every number below is editable</span></div>
+    <div class="assum">
+      <label>Vehicle efficiency</label>
+      <div class="stepper" id="wEff"><button onclick="assumStep('eff',-.1,1,8)">−</button><input type="number" id="effInput" value="3.5" oninput="calc()"/><span class="unit">mi/kWh</span><button onclick="assumStep('eff',.1,1,8)">+</button></div>
+      <div class="src">Typical for a mid‑size EV; check your vehicle's EPA/WLTP figure for a real comparison.</div>
+      <label>Comparable gas mileage</label>
+      <div class="stepper" id="wMpg"><button onclick="assumStep('mpg',-1,10,60)">−</button><input type="number" id="mpgInput" value="30" oninput="calc()"/><span class="unit">mpg</span><button onclick="assumStep('mpg',1,10,60)">+</button></div>
+      <div class="src">The car you're mentally comparing this EV against.</div>
+      <label>Gas price</label>
+      <div class="stepper" id="wGas"><button onclick="assumStep('gas',-.1,1,8)">−</button><input type="number" id="gasInput" value="3.50" oninput="calc()"/><span class="unit">$/gal</span><button onclick="assumStep('gas',.1,1,8)">+</button></div>
+      <div class="src">Local pump price — this drives the "gas equivalent" figure directly.</div>
+      <label>Charging losses (AC / DC)</label>
+      <div class="stepper" id="wLossAc"><button onclick="assumStep('lossAc',-1,0,30)">−</button><input type="number" id="lossAcInput" value="12" oninput="calc()"/><span class="unit">%</span><button onclick="assumStep('lossAc',1,0,30)">+</button></div>
+      <div class="src">Energy lost between the wall and the battery — published AC on‑board‑charger losses are typically 10–15%; DC losses (below) are usually smaller.</div>
+      <label></label>
+      <div class="stepper" id="wLossDc"><button onclick="assumStep('lossDc',-1,0,30)">−</button><input type="number" id="lossDcInput" value="7" oninput="calc()"/><span class="unit">% DC</span><button onclick="assumStep('lossDc',1,0,30)">+</button></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="side">
+  <div class="card">
+    <div class="hero-num">
+      <div><div class="h-lab">Cost to charge</div><div class="h-val" id="rCost">$0.00</div><div class="h-unit">from the wall, after losses</div></div>
+      <div><div class="h-lab">Charging time</div><div class="h-val time" id="rTime">0</div><div class="h-unit" id="etaSide"></div></div>
+    </div>
+    <div class="gauge">
+      <svg width="92" height="92" viewBox="0 0 92 92">
+        <circle cx="46" cy="46" r="38" fill="none" stroke="var(--line-soft)" stroke-width="9"/>
+        <circle id="gArc" cx="46" cy="46" r="38" fill="none" stroke="var(--copper)" stroke-width="9" stroke-linecap="round" stroke-dasharray="238.8" stroke-dashoffset="238.8" transform="rotate(-90 46 46)" style="transition:stroke-dashoffset .35s ease"/>
+        <text id="gPct" x="46" y="51" text-anchor="middle" fill="#fff" font-family="Inter, sans-serif" font-size="16" font-weight="700">0%</text>
+      </svg>
+      <div><div class="g-lab">Energy into battery</div><div class="g-val" id="rEnergy">0.0 kWh</div><div class="g-sub" id="gSub">of 75 kWh pack</div></div>
+    </div>
+    <div class="mini">
+      <div><span class="m-lab">Energy drawn from wall</span><span class="m-val" id="mWall">0.0 kWh</span></div>
+      <div><span class="m-lab">Gas‑equivalent cost</span><span class="m-val" id="mGas">$0.00</span></div>
+      <div><span class="m-lab">Net savings vs. gas</span><span class="m-val m-save" id="mSave">$0.00</span></div>
+      <div><span class="m-lab">Range added</span><span class="m-val" id="mRange">+0 mi</span></div>
+    </div>
+    <div class="unit-toggle">
+      <button class="active" id="uMi" onclick="setUnits('mi')">Miles</button>
+      <button id="uKm" onclick="setUnits('km')">Kilometres</button>
+    </div>
+    <details>
+      <summary>Calculation breakdown</summary>
+      <div style="margin-top:10px">
+        <div class="bk"><span>Charge added</span><span id="bkAdded">0%</span></div>
+        <div class="bk"><span>Energy into battery</span><span id="bkEnergy">0 kWh</span></div>
+        <div class="bk"><span>Charging losses applied</span><span id="bkLoss">0%</span></div>
+        <div class="bk"><span>Energy from wall</span><span id="bkWall">0 kWh</span></div>
+        <div class="bk"><span>Electricity rate</span><span id="bkRate">$0/kWh</span></div>
+        <div class="bk"><span>Effective charger power</span><span id="bkCharger">0 kW</span></div>
+        <div class="bk"><span>Time below 80%</span><span id="bkT1">0 h</span></div>
+        <div class="bk"><span>Time above 80%, tapered</span><span id="bkT2">0 h</span></div>
+      </div>
+    </details>
+  </div>
+</div>
+</div>
+
+<footer>Built by Kevin Chiwera. <a href="https://github.com/chiwerak-oss/ev-charging-calculator" target="_blank" rel="noopener">Source on GitHub</a>. V2G Capstone Research, Africa University. Charging‑curve, loss and V2G figures are simplified, editable estimates for research use — not a substitute for a manufacturer's published specification.</footer>
+
+</div>
+</div>
+
+<div class="sticky-bar" id="stickyBar">
+  <div class="sb-item"><div class="sb-lab">COST</div><div class="sb-val" id="sbCost">$0.00</div></div>
+  <div class="sb-item"><div class="sb-lab">TIME</div><div class="sb-val time" id="sbTime">0</div></div>
+  <div class="sb-item"><div class="sb-lab">ENERGY</div><div class="sb-val time" id="sbEnergy">0 kWh</div></div>
+</div>
+
+<script>
+var VEH={small:{cap:40,ac:7.2,dc:50},mid:{cap:75,ac:11,dc:150},long:{cap:100,ac:11,dc:250}};
+var vehicleClass='mid';
+var CHARGERS=[
+  {id:'l1',name:'Level 1',kw:2.4,dc:false},
+  {id:'l2',name:'Level 2',kw:7.2,dc:false},
+  {id:'dcf',name:'DC Fast',kw:50,dc:true},
+  {id:'sup',name:'Super',kw:150,dc:true},
+  {id:'ult',name:'Ultra',kw:250,dc:true}
+];
+var selected='l2', customKw=11, isCustomSelected=false;
+var curve=true, v2gOn=false, units='mi';
+var TAPER=.25;
+
+function cl(v,a,b){return Math.max(a,Math.min(b,v))}
+function g(id){return document.getElementById(id)}
+
+/* splash */
+var msgs=["Loading vehicle & tariff models…","Reading published charge curves…","Setting up the discharge model…"],mi=0;
+var cyc=setInterval(function(){g('spMsg').textContent=msgs[mi++%msgs.length]},650);
+window.addEventListener('load',function(){setTimeout(done,1100)});
+setTimeout(done,2200);
+function done(){var s=g('splash');if(!s||s.classList.contains('out'))return;clearInterval(cyc);s.classList.add('out');g('app').classList.add('ready');setTimeout(function(){s.style.display='none'},420)}
+
+/* focus glow */
+['capacity','current','target','rate','customKw','v2gReserve','v2gKw','v2gRate','effInput','mpgInput','gasInput','lossAcInput','lossDcInput'].forEach(function(id){
+  var el=g(id);if(!el)return;var w=el.closest('.stepper');
+  el.addEventListener('focus',function(){w&&w.classList.add('focus')});
+  el.addEventListener('blur',function(){w&&w.classList.remove('focus')});
+});
+
+function vehMax(dc){var v=VEH[vehicleClass];return dc?v.dc:v.ac}
+
+function preset(b,key){
+  document.querySelectorAll('#presetRow button').forEach(function(c){c.classList.remove('active')});
+  b.classList.add('active'); vehicleClass=key; g('capacity').value=VEH[key].cap; calc();
+}
+function step(id,d,a,b){g(id).value=cl((parseFloat(g(id).value)||0)+d,a,b); id==='capacity'?capIn():chargeIn()}
+function capIn(){
+  g('capacity').value=cl(parseFloat(g('capacity').value)||10,10,150);
+  document.querySelectorAll('#presetRow button').forEach(function(c){c.classList.remove('active')});
+  calc();
+}
+function chargeIn(){
+  var c=g('current'),t=g('target');
+  c.value=cl(parseFloat(c.value)||0,0,100); t.value=cl(parseFloat(t.value)||0,0,100); calc();
+}
+function rateStep(d){g('rate').value=cl((parseFloat(g('rate').value)||0)+d,.01,5).toFixed(2); calc()}
+function toggleCurve(){if(!isDCSelected())return; curve=!curve; g('sw').classList.toggle('on',curve); calc()}
+function customIn(){customKw=cl(parseFloat(g('customKw').value)||11,1,500); if(isCustomSelected)calc()}
+function customStep(d){g('customKw').value=cl((parseFloat(g('customKw').value)||0)+d,1,500); customIn()}
+function useCustom(){isCustomSelected=true; calc()}
+function assumStep(key,d,a,b){
+  var map={eff:'effInput',mpg:'mpgInput',gas:'gasInput',lossAc:'lossAcInput',lossDc:'lossDcInput'};
+  var el=g(map[key]); el.value=cl((parseFloat(el.value)||0)+d,a,b).toFixed(key==='eff'||key==='gas'?1:0); calc();
+}
+function v2gStep(key,d,a,b){
+  var map={reserve:'v2gReserve',kw:'v2gKw',rate:'v2gRate'};
+  var el=g(map[key]); var dec=key==='rate'?2:0;
+  el.value=cl((parseFloat(el.value)||0)+d,a,b).toFixed(dec); calc();
+}
+function toggleV2g(){v2gOn=!v2gOn; g('swV2g').classList.toggle('on',v2gOn); g('v2gPanel').style.display=v2gOn?'block':'none'; updateFlow(); calc()}
+function setUnits(u){units=u; g('uMi').classList.toggle('active',u==='mi'); g('uKm').classList.toggle('active',u==='km'); calc()}
+
+function isDCSelected(){
+  if(isCustomSelected) return customKw>=50;
+  var c=CHARGERS.find(function(c){return c.id===selected}); return c?c.dc:false;
+}
+function selectCharger(id){isCustomSelected=false; selected=id; calc()}
+
+function fmtTime(h){
+  if(h<=0) return '0 min';
+  if(h<1) return Math.round(h*60)+' min';
+  var hh=Math.floor(h), mm=Math.round((h-hh)*60);
+  if(mm===60){hh++;mm=0}
+  return mm===0?hh+'h':hh+'h '+mm+'m';
+}
+function etaFrom(h){
+  var d=new Date(Date.now()+h*3600000);
+  var hrs=d.getHours(), m=d.getMinutes();
+  var ap=hrs>=12?'pm':'am'; var h12=hrs%12; if(h12===0)h12=12;
+  return 'ready ~'+h12+':'+(m<10?'0':'')+m+ap;
+}
+
+function chargeTime(effKw,cap,cur,tgt,taperOn){
+  var kn=.8;
+  var e1=cap*Math.max(0,Math.min(tgt,kn)-cur);
+  var e2=cap*Math.max(0,tgt-Math.max(cur,kn));
+  var t1=effKw>0?e1/effKw:0;
+  var t2=effKw>0?e2/(effKw*(taperOn?TAPER:1)):0;
+  return {t1:t1,t2:t2,total:t1+t2};
+}
+
+function updateFlow(){
+  var line1=g('flowLine1'), line2=g('flowLine2');
+  line1.classList.toggle('v2g-on',v2gOn); line2.classList.toggle('v2g-on',v2gOn);
+  g('nodeCharger').classList.toggle('v2g',v2gOn);
+  g('nodeCharger').classList.toggle('active',!v2gOn);
+}
+
+function renderTable(cap,cur,tgt,rate,lossAc,lossDc){
+  var body=g('ctableBody'); var html='';
+  CHARGERS.forEach(function(c){
+    var cap_kw=Math.min(c.kw, vehMax(c.dc));
+    var taperOn=curve && c.dc;
+    var res=chargeTime(cap_kw,cap,cur/100,tgt/100,taperOn);
+    var energy=Math.max(0,cap*(tgt-cur)/100);
+    var loss=c.dc?lossDc:lossAc;
+    var wallE=energy/(1-loss/100);
+    var cost=wallE*rate;
+    var isSel=!isCustomSelected && c.id===selected;
+    var capped=cap_kw<c.kw;
+    html+='<tr class="'+(isSel?'sel':'')+'" onclick="selectCharger(\''+c.id+'\')">'+
+      '<td class="name"><span class="dotm"></span>'+c.name+'<span class="capnote">'+(c.dc?'DC':'AC')+'</span></td>'+
+      '<td class="num">'+cap_kw.toFixed(1)+' kW'+(capped?' <span class="capnote">(capped)</span>':'')+'</td>'+
+      '<td class="num">'+fmtTime(res.total)+'</td>'+
+      '<td class="num">$'+cost.toFixed(2)+'</td></tr>';
+  });
+  if(isCustomSelected){
+    var cdc=customKw>=50;
+    var cap_kw=Math.min(customKw, vehMax(cdc));
+    var taperOn=curve && cdc;
+    var res=chargeTime(cap_kw,cap,cur/100,tgt/100,taperOn);
+    var energy=Math.max(0,cap*(tgt-cur)/100);
+    var loss=cdc?lossDc:lossAc;
+    var wallE=energy/(1-loss/100);
+    var cost=wallE*rate;
+    html+='<tr class="sel"><td class="name"><span class="dotm" style="opacity:1"></span>Custom<span class="capnote">'+(cdc?'DC':'AC')+'</span></td>'+
+      '<td class="num">'+cap_kw.toFixed(1)+' kW</td><td class="num">'+fmtTime(res.total)+'</td><td class="num">$'+cost.toFixed(2)+'</td></tr>';
+  }
+  body.innerHTML=html;
+}
+
+function calc(){
+  var cap=parseFloat(g('capacity').value)||0,
+      curP=parseFloat(g('current').value)||0,
+      tgtP=parseFloat(g('target').value)||0,
+      rate=parseFloat(g('rate').value)||0,
+      lossAc=parseFloat(g('lossAcInput').value)||0,
+      lossDc=parseFloat(g('lossDcInput').value)||0,
+      eff=parseFloat(g('effInput').value)||3.5,
+      mpg=parseFloat(g('mpgInput').value)||30,
+      gas=parseFloat(g('gasInput').value)||3.5;
+
+  var bad=curP>tgtP;
+  g('errTip').classList.toggle('show',bad);
+  g('wCur').classList.toggle('bad',bad); g('wTgt').classList.toggle('bad',bad);
+  g('labCur').textContent=Math.round(curP)+'%'; g('labTgt').textContent=Math.round(tgtP)+'%';
+  g('delta').textContent=(bad?'':'+')+Math.round(tgtP-curP)+'%';
+  g('delta').style.opacity=bad?'.35':'1';
+  g('barFill').style.width=(bad?curP:tgtP)+'%';
+  g('battFlowLabel').textContent=cap+' kWh PACK';
+
+  var dcSel=isDCSelected();
+  var swEl=g('sw');
+  swEl.classList.toggle('disabled',!dcSel);
+  g('acNote').classList.toggle('show',!dcSel);
+  g('taperSub').style.opacity=dcSel?'1':'.5';
+
+  renderTable(cap,curP,tgtP,rate,lossAc,lossDc);
+
+  var effKw, isDC, chargerLabel;
+  if(isCustomSelected){
+    isDC=customKw>=50; effKw=Math.min(customKw,vehMax(isDC)); chargerLabel='CUSTOM '+customKw+'KW';
+  } else {
+    var c=CHARGERS.find(function(c){return c.id===selected});
+    isDC=c.dc; effKw=Math.min(c.kw,vehMax(isDC)); chargerLabel=c.name.toUpperCase();
+  }
+  g('chargerFlowLabel').textContent=chargerLabel;
+
+  if(bad){ updateFlow(); return; }
+
+  var cur=curP/100, tgt=tgtP/100;
+  var energy=Math.max(0,cap*(tgt-cur));
+  var loss=isDC?lossDc:lossAc;
+  var wallEnergy=energy/(1-loss/100);
+  var cost=wallEnergy*rate;
+  var taperOn=curve && isDC;
+  var res=chargeTime(effKw,cap,cur,tgt,taperOn);
+  var hrs=res.total;
+
+  g('rCost').textContent='$'+cost.toFixed(2);
+  g('rTime').textContent=fmtTime(hrs);
+  var etaStr=hrs>0?etaFrom(hrs):'';
+  g('etaSide').textContent=etaStr; g('etaTop').textContent=etaStr;
+  g('sbCost').textContent='$'+cost.toFixed(2);
+  g('sbTime').textContent=fmtTime(hrs);
+  g('sbEnergy').textContent=energy.toFixed(1)+' kWh';
+
+  g('rEnergy').textContent=energy.toFixed(1)+' kWh';
+  g('gSub').textContent='of '+cap+' kWh pack';
+  var pct=cap>0?energy/cap:0;
+  g('gArc').setAttribute('stroke-dashoffset',(238.8*(1-pct)).toFixed(1));
+  g('gPct').textContent=Math.round(pct*100)+'%';
+
+  var mFactor = units==='mi' ? 1 : 1.60934;
+  var unitLabel = units==='mi' ? 'mi' : 'km';
+  var range=energy*eff*mFactor;
+  var gasCost=(range/mFactor)/mpg*gas; // gas math always in miles internally
+  var save=gasCost-cost;
+  g('mWall').textContent=wallEnergy.toFixed(1)+' kWh';
+  g('mGas').textContent='$'+gasCost.toFixed(2);
+  g('mSave').textContent=(save>=0?'$':'-$')+Math.abs(save).toFixed(2);
+  g('mSave').style.color=save>=0?'var(--green)':'var(--red)';
+  g('mRange').textContent='+'+Math.round(range)+' '+unitLabel;
+
+  g('bkAdded').textContent=Math.round((tgt-cur)*100)+'%';
+  g('bkEnergy').textContent=energy.toFixed(2)+' kWh';
+  g('bkLoss').textContent=loss+'% ('+(isDC?'DC':'AC')+')';
+  g('bkWall').textContent=wallEnergy.toFixed(2)+' kWh';
+  g('bkRate').textContent='$'+rate.toFixed(2)+'/kWh';
+  g('bkCharger').textContent=effKw.toFixed(1)+' kW'+(taperOn?' (tapered above 80%)':'');
+  g('bkT1').textContent=fmtTime(res.t1); g('bkT2').textContent=fmtTime(res.t2);
+  g('warn100').style.display=tgt>=1?'block':'none';
+  g('taperNote').textContent = dcSel
+    ? (taperOn && res.t2>0 ? 'Taper begins at '+fmtTime(res.t1)+'; the last '+Math.round((tgt-.8)*100)+'% takes '+fmtTime(res.t2) : 'Taper disabled — full power assumed to target.')
+    : 'AC charging is close to constant power — no taper modeled.';
+
+  draw(cur,tgt,res.t1,res.t2,taperOn);
+  updateFlow();
+
+  /* V2G */
+  var reserve=parseFloat(g('v2gReserve').value)||0;
+  var v2gKw=parseFloat(g('v2gKw').value)||7;
+  var v2gRate=parseFloat(g('v2gRate').value)||0;
+  var exportable=Math.max(0,cap*(cur-reserve/100));
+  var payout=exportable*v2gRate;
+  var v2gHrs=v2gKw>0?exportable/v2gKw:0;
+  g('v2gEnergy').textContent=exportable.toFixed(1)+' kWh';
+  g('v2gEnergySub').textContent='down to '+Math.round(reserve)+'% reserve, from current '+Math.round(curP)+'%';
+  g('v2gPayout').textContent='$'+payout.toFixed(2);
+  g('v2gTime').textContent=fmtTime(v2gHrs)+' at '+v2gKw+' kW';
+}
+
+function draw(cur,tgt,t1,t2,taper){
+  var W=640,H=220,L=38,R=10,T=12,B=26,total=(t1+t2)||1;
+  var x=function(t){return L+(t/total)*(W-L-R)}, y=function(s){return T+(1-s)*(H-T-B)};
+  var s='';
+  [0,.25,.5,.75,1].forEach(function(v){
+    s+='<line x1="'+L+'" y1="'+y(v)+'" x2="'+(W-R)+'" y2="'+y(v)+'" stroke="rgba(255,255,255,.06)"/>';
+    s+='<text x="'+(L-8)+'" y="'+(y(v)+4)+'" text-anchor="end" fill="#8B8E96" font-family="IBM Plex Mono, monospace" font-size="10">'+(v*100)+'%</text>';
+  });
+  var kn=Math.min(Math.max(cur,.8),tgt);
+  var end1=t2>0?kn:tgt;
+  s+='<polyline fill="none" stroke="#E1954F" stroke-width="2.5" stroke-linecap="round" points="'+x(0)+','+y(cur)+' '+x(t1)+','+y(end1)+'"/>';
+  s+='<circle cx="'+x(0)+'" cy="'+y(cur)+'" r="4" fill="#E1954F"/>';
+  if(t2>0){
+    s+='<polyline fill="none" stroke="'+(taper?'#E1954F':'#E1954F')+'" stroke-opacity="'+(taper?'.5':'1')+'" stroke-width="2.5" stroke-linecap="round" points="'+x(t1)+','+y(kn)+' '+x(total)+','+y(tgt)+'"/>';
+    if(taper){
+      s+='<line x1="'+x(t1)+'" y1="'+T+'" x2="'+x(t1)+'" y2="'+(H-B)+'" stroke="#E1954F" stroke-dasharray="3 4" opacity=".4"/>';
+      s+='<text x="'+(x(t1)+7)+'" y="'+(T+12)+'" fill="#E1954F" font-family="IBM Plex Mono, monospace" font-size="10">80% · taper starts</text>';
+    }
+  }
+  s+='<circle cx="'+x(total)+'" cy="'+y(tgt)+'" r="4" fill="#fff"/>';
+  s+='<text x="'+L+'" y="'+(H-6)+'" fill="#8B8E96" font-family="IBM Plex Mono, monospace" font-size="10">0</text>';
+  s+='<text x="'+(W-R)+'" y="'+(H-6)+'" text-anchor="end" fill="#8B8E96" font-family="IBM Plex Mono, monospace" font-size="10">'+fmtTime(total)+'</text>';
+  g('chart').innerHTML=s;
+}
+
+calc();
+</script>
+</body>
+</html>
